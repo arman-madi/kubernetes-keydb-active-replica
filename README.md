@@ -10,6 +10,23 @@ statefulset.apps/keydb created
 deployment.apps/keydb-producer created
 deployment.apps/keydb-consumer created
 ```
+### For running on single node kubernetes cluster comment out the following section in k8resources.yaml
+```
+...
+#      affinity:
+#        # The affinity section here is to make sure each KeyDB pod will be created
+#        # on a unique node, if you have only one Node just comment out this section.
+#        podAntiAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#          - labelSelector:
+#              matchExpressions:
+#              - key: app
+#                operator: In
+#                values:
+#                - keydb
+#            topologyKey: "kubernetes.io/hostname"
+...
+```
 ### Check keydb pods are up and running:  
 ```
 > kubectl get pods -l app=keydb  
