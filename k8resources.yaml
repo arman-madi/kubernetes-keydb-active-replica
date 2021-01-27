@@ -1,0 +1,133 @@
+# Headless service for proper name resolution
+apiVersion: v1
+kind: Service
+metadata:
+  name: keydb
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: keydb
+  ports:
+    - name: server
+      protocol: TCP
+      port: 6379
+      targetPort: keydb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keydb
+  namespace: default
+  labels:
+    app: keydb
+spec:
+  selector:
+    matchLabels:
+      app: keydb
+  serviceName: "keydb"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: keydb
+    spec:
+      tolerations:
+      # this toleration is to have the pods runnable on master nodes
+      # remove it if your masters can't run pods
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      affinity:
+        # The affinity section here is to make sure each KeyDB pod will be created
+        # on a unique node, if you have only one Node just comment out this section.
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - keydb
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: keydb
+        image: eqalpha/keydb:x86_64_v6.0.16
+        command: [ "/bin/sh" ]
+        # the below keydb-server options are used for this tutorial and
+        # may not be proper for your production environment, for more
+        # information refer to https://docs.keydb.dev/docs/config-file/
+        args: [ "-c", '
+        replica="keydb-0.keydb";
+        if [ "$(hostname)" = "keydb-0" ]; then replica="keydb-1.keydb"; fi;
+        keydb-server
+         --server-threads 2
+         --bind 0.0.0.0
+         --port 6379
+         --protected-mode no
+         --appendonly no
+         --loglevel notice
+         --hz 3
+         --dynamic-hz yes
+         --active-replica yes
+         --multi-master no
+         --min-clients-per-thread 1
+         --replicaof $replica 6379
+         '
+        ]
+        resources:
+          limits:
+            # Limit the CPU usage under %30, and may need different value for prod
+            cpu: "300m"
+        ports:
+          - name: keydb
+            containerPort: 6379
+            protocol: TCP
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keydb-producer
+spec:
+  selector:
+    matchLabels:
+      app: keydb-producer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: keydb-producer
+    spec:
+      containers:
+      - name: keydb-producer
+        image:  rmanmadi/k8-tutorial-samples:keydb-stream-producer
+        imagePullPolicy: Always
+      tolerations:
+        # this toleration is to have the pods runnable on master nodes
+        # remove it if your masters can't run pods
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keydb-consumer
+spec:
+  selector:
+    matchLabels:
+      app: keydb-consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: keydb-consumer
+    spec:
+      containers:
+      - name: keydb-producer
+        image:  rmanmadi/k8-tutorial-samples:keydb-stream-consumer
+        imagePullPolicy: Always
+      tolerations:
+        # this toleration is to have the pods runnable on master nodes
+        # remove it if your masters can't run pods
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
