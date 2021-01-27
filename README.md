@@ -28,7 +28,7 @@ OK
 >  kubectl exec keydb-0 -- keydb-cli get key2 
 value2
 ```
-### check the log of producer and consumer to see how they work
+### Check the log of producer and consumer to see how they work
 find pod names by `kubectl get pods`  
 ```
  > kubectl logs -f keydb-producer-974fbbb48-krbdg
